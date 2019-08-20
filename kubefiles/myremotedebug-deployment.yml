@@ -15,7 +15,7 @@ spec:
         app: myremotedebug
     spec:
       containers:
-      - name: myremotedbug
+      - name: myremotedebug
         image: hatmarch/myremotedebug:v1         
         ports:
           - containerPort: 8080

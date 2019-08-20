@@ -79,7 +79,7 @@ Step 5/6 : EXPOSE 8080
  ---> Running in 08eea37846a8
  ---> c578def62b1d
 Removing intermediate container 08eea37846a8
-Step 6/6 : CMD java -XX:+PrintFlagsFinal -XX:+PrintGCDetails $JAVA_OPTIONS -jar $JAVA_APP_JAR
+Step 6/6 : CMD java -XX:+PrintFlagsFinal -XX:+PrintGCDetails -jar $JAVA_APP_JAR
  ---> Running in 2d497de28246
  ---> 38d2afa981db
 Removing intermediate container 2d497de28246
@@ -145,9 +145,116 @@ $ curl www.example.com:5000
 curl: (7) Failed to connect to www.example.com port 5000: Connection refused
 ----
 
-== Debug the Crash
+== Create Debuggable Container Image
 
 We don't always want the debugger to be running in the container, but we also want to keep the container as immutable as possible.  What we'll do instead is to expose some environment variables into the entrypoint of the container.
 
-Notice the Dockerfile-Debug file in the root of the repo.  Notice the following changes
+Notice the Dockerfile-Debug file in the root of the repo.  Notice the following changes:
+
+image::DockerfileChanges.png[Changes to the Dockerfile]
+
+The JAVA_OPTIONS environment variable will allow us to container whether the java entry point is run with jdwp support.
+
+Let's create a new image based on the Dockerfile-Debug file
+
+----
+$ docker build -t hatmarch/myremotedebug:v2 -f Dockerfile-Debug .
+Sending build context to Docker daemon  15.14MB
+Step 1/6 : FROM openjdk:8u151
+ ---> a30a1e547e6d
+Step 2/6 : ENV JAVA_APP_JAR remote-debug-demo-0.0.1.jar
+ ---> Using cache
+ ---> 979fe7924887
+Step 3/6 : WORKDIR /app/
+ ---> Using cache
+ ---> 086d05926279
+Step 4/6 : COPY target/$JAVA_APP_JAR .
+ ---> Using cache
+ ---> 0c2e4b36fdce
+Step 5/6 : EXPOSE 8080
+ ---> Using cache
+ ---> c578def62b1d
+Step 6/6 : CMD java -XX:+PrintFlagsFinal -XX:+PrintGCDetails $JAVA_OPTIONS -jar $JAVA_APP_JAR
+ ---> Using cache
+ ---> 38d2afa981db
+Successfully built 38d2afa981db
+----
+
+Now let's update our deployment to point to the new image
+
+----
+$ oc set image deployment/myremotedebug myremotedebug=hatmarch/myremotedebug:v2
+deployment.extensions/myremotedebug image updated
+----
+
+If you'd like, go back to the "Simulate a Crash" section and prove that debug port is still not open
+
+Next, we want to update the environment variables in our deployment to activate remote debugging services.  For this, take a look at the contents of the Java_Debug.txt file.
+
+It will cause the debugger to run listening on port 5000.  It is also setup NOT to suspend execution until a debugger is attached.  You can change that functionality if you'd like.
+
+----
+$  oc set env deployment/myremotedebug JAVA_OPTIONS="$(cat Java_Debug.txt)"
+deployment.extensions/myremotedebug updated
+----
+
+This should change the deployment and trigger the creation of a new pod.  You can check this in the console.
+
+image:EnvVariables.png[New Environment variables for debugger]
+
+Now all that's left is being able to connect to the pod.  For this, we will use *port forwarding*
+
+== Debug the Pod
+
+Port forwarding works by routing a port on our localhost to a port on a *specific* pod.  First, find the specific pod you want
+
+----
+$ oc get pods
+NAME                             READY     STATUS    RESTARTS   AGE
+myremotedebug-5679bf775c-gwzpx   1/1       Running   0          6m
+----
+
+Next set up port forwarding to port 5000 (the port the debugger should be listening on) on that pod.  _Do this from a terminal on your localhost_
+
+----
+$ oc port-forward myremotedebug-5679bf775c-gwzpx 32000:5000
+Forwarding from 127.0.0.1:32000 -> 5000
+Forwarding from [::1]:32000 -> 5000
+----
+
+Now our local port 32000 should be forwarded to port 5000 on pod myremotedebug-5679bf775c-gwzpx.  Note that you can also forward to port 5000 is you like.  See info link:https://docs.openshift.com/container-platform/3.11/dev_guide/port_forwarding.html[here].
+
+Now we open a _new_ terminal whilst the port forwarding is active and open the java command line debugger
+
+----
+$ jdb -attach docker.for.mac.localhost:5000 -sourcepath src/main/java
+Set uncaught java.lang.Throwable
+Set deferred uncaught java.lang.Throwable
+Initializing jdb ...
+> stop in com.hatmarch.MyRESTController.doCrash()
+Set breakpoint com.hatmarch.MyRESTController.doCrash()
+----
+
+Next we have to connect to the pod through its node port
+
+----
+curl $CLUSTER_IP:$(oc get service/myremotedebug  -o jsonpath="{.spec.ports[*].nodePort})
+----
+
+And then you should see the debugger terminal
+----
+Breakpoint hit: "thread=http-nio-8080-exec-3", com.hatmarch.MyRESTController.doCrash(), line=30 bci=0
+30            throw new IllegalAccessError();
+
+http-nio-8080-exec-3[1] list
+26       }
+27    
+28       @RequestMapping("/crash") 
+29       public String doCrash() {
+30 =>         throw new IllegalAccessError();
+31       }
+32    
+33       
+34    }
+----
 
