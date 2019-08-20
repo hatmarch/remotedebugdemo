@@ -4,7 +4,7 @@ Marc Hildenbrand <mwhildenbrand@gmail.com>
 ifndef::codedir[:codedir: code]
 ifndef::imagesdir[:imagesdir: images]
 
-Create and change into a directory where you would like to work.
+Create and clone into a directory where you would like to work.
 
 == Prerequisites
 It is assumed that you have:
