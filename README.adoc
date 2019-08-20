@@ -7,6 +7,8 @@ ifndef::imagesdir[:imagesdir: images]
 
 Create and clone into a directory where you would like to work.
 
+Note that this is setup to work with the VisualStudio Code link:https://github.com/Microsoft/vscode-remote-release[Remote Development Extension Pack].
+
 == Prerequisites
 It is assumed that you have:
 
@@ -239,10 +241,10 @@ Forwarding from [::1]:32000 -> 5000
 
 Now our local port 32000 should be forwarded to port 5000 on pod myremotedebug-5679bf775c-gwzpx.  Note that you can also forward to port 5000 is you like.  See info link:https://docs.openshift.com/container-platform/3.11/dev_guide/port_forwarding.html[here].
 
-Now we open a _new_ terminal whilst the port forwarding is active and open the java command line debugger.  Note that the debugger is attaching to _our local machine_ (the machine from whence we issued the oc port-forward command)
+Now we open a _new_ terminal whilst the port forwarding is active and open the java command line debugger.footnote:[Of course you can also use the concepts here and connect with your IDE debugging tools of choice as well.  JDB is used for illustrative purposes]  Note that the debugger is attaching to _our local machine_ (the machine from whence we issued the oc port-forward command)
 
 ----
-$ jdb -attach localhost:32000 -sourcepath src/main/java
+$ jdb -attach localhost:32000 -sourcepath src/main/java 
 Set uncaught java.lang.Throwable
 Set deferred uncaught java.lang.Throwable
 Initializing jdb ...
@@ -273,3 +275,4 @@ http-nio-8080-exec-3[1] list
 34    }
 ----
 
+Happy Debugging!
