@@ -1,0 +1,153 @@
+= On Demand Remote Debugging with OpenShift
+Marc Hildenbrand <mwhildenbrand@gmail.com>
+
+ifndef::codedir[:codedir: code]
+ifndef::imagesdir[:imagesdir: images]
+
+Create and change into a directory where you would like to work.
+
+== Prerequisites
+It is assumed that you have:
+
+* command line access to docker (pointing into the OpenShift cluster) for instance:
+
+----
+export DOCKER_TLS_VERIFY="1" 
+# set to Docker Host on cluster
+export DOCKER_HOST="tcp://192.168.99.100:2376" 
+export DOCKER_CERT_PATH="/Users/marc.hildenbrand/.minishift/profiles/oc/certs" 
+----
+
+* command line access to openshift-cli that points into an accessible OpenShift cluster)
+* an OpenShift project you have 'edit' access to (will be called remote-debug throughout this example)
+
+== OpenShift Setup
+
+You can skip this section if you already have a destination project that you'd like to work in, just bear in mind the pre-requisites above.
+
+----
+$ oc new-project remote-debug
+Now using project "remotedebug" on server "https://192.168.99.100:8443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app centos/ruby-25-centos7~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby.
+----
+
+== Build the Application
+
+We're going to build a simple springboot application that will be folded into a docker container.  This container will be associated with a deployment.
+
+Start at the root of the git project
+
+Build the application locally
+
+----
+$ mvn clean install
+
+----
+
+Test that the application runs locally
+
+----
+$ java -jar target/remote-debug-demo-0.0.1.jar
+$ curl localhost:8080
+----
+
+== Build the Container
+
+Now that the target is built, we want to build it into our Dockerfile.  _Notice that the only exposed port is the port that SpringBoot wants to listen on, 8080_
+
+----
+$ docker build -t hatmarch/myremotedebug:v1 .
+Sending build context to Docker daemon  14.59MB
+Step 1/6 : FROM openjdk:8u151
+ ---> a30a1e547e6d
+Step 2/6 : ENV JAVA_APP_JAR remote-debug-demo-0.0.1.jar
+ ---> Running in a3ec4310bf55
+ ---> 979fe7924887
+Removing intermediate container a3ec4310bf55
+Step 3/6 : WORKDIR /app/
+ ---> 086d05926279
+Removing intermediate container 4d6ae7dafc3a
+Step 4/6 : COPY target/$JAVA_APP_JAR .
+ ---> 0c2e4b36fdce
+Removing intermediate container 83a08807f89e
+Step 5/6 : EXPOSE 8080
+ ---> Running in 08eea37846a8
+ ---> c578def62b1d
+Removing intermediate container 08eea37846a8
+Step 6/6 : CMD java -XX:+PrintFlagsFinal -XX:+PrintGCDetails $JAVA_OPTIONS -jar $JAVA_APP_JAR
+ ---> Running in 2d497de28246
+ ---> 38d2afa981db
+Removing intermediate container 2d497de28246
+Successfully built 38d2afa981db
+----
+
+Check that the image has been uploaded to the cluster
+
+----
+$ docker images
+REPOSITORY                                     TAG                 IMAGE ID            CREATED             SIZE
+hatmarch/myremotedebug                         v1                  38d2afa981db        3 days ago          752MB
+----
+
+Now create a deployment config that uses that image
+
+----
+$ oc create -f kubefiles/myremotedebug-deployment.yml 
+deployment.extensions/myremotedebug created
+----
+
+Then create the service to reference this deployment
+
+----
+$ oc create -f kubefiles/myremotedebug-service.yml 
+service/myremotedebug created
+----
+
+Now create a route.  _NOTE: You route is setup to resolve www.example.com.  Update this with a suitable hostname for your cluster_
+
+----
+$ oc create -f kubefiles/myremotedebug-route.yml 
+route.route.openshift.io/remote-debug created
+----
+
+You should now see your app and deployment under the remote-debug project
+
+image::CreatedDeployment.png[OpenShift Console]
+
+And be able to access it
+----
+$ curl www.example.com:8080
+Aloha from Spring Boot! 1 on 1563536cbdf2
+----
+
+== Simulate a Crash
+
+Let's pretend you call an endpoint and it causes a crash
+
+----
+$ curl www.example.com:8080/crash
+{"timestamp":1565993738150,"status":500,"error":"Internal Server Error","exception":"java.lang.IllegalAccessError","message":"No message available","path":"/crash"}
+----
+
+Or this:
+
+image::CrashOutput.png[Crash Output]
+
+We will want to open a debug port on 5000.  Let's first prove that no debugging port is open
+
+----
+$ curl www.example.com:5000
+curl: (7) Failed to connect to www.example.com port 5000: Connection refused
+----
+
+== Debug the Crash
+
+We don't always want the debugger to be running in the container, but we also want to keep the container as immutable as possible.  What we'll do instead is to expose some environment variables into the entrypoint of the container.
+
+Notice the Dockerfile-Debug file in the root of the repo.  Notice the following changes
+
