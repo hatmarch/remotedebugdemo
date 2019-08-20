@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: myremotedebug
+  name: myremotedebug
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myremotedebug
+  template:
+    metadata:
+      labels:
+        app: myremotedebug
+    spec:
+      containers:
+      - name: myremotedbug
+        image: hatmarch/myremotedebug:v1         
+        ports:
+          - containerPort: 8080
+
