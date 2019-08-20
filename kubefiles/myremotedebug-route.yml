@@ -1,16 +1,17 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  creationTimestamp: 2019-08-16T22:03:06Z
+  annotations:
+    openshift.io/host.generated: "true"
+  creationTimestamp: 2019-08-20T13:27:50Z
   labels:
     app: myremotedebug
-  name: remote-debug
-  namespace: remote-debug
-  resourceVersion: "731058"
-  selfLink: /apis/route.openshift.io/v1/namespaces/remote-debug/routes/remote-debug
-  uid: a095f48c-c071-11e9-8865-080027f3d19a
+  name: myremotedebug
+  resourceVersion: "83849"
+  selfLink: /apis/route.openshift.io/v1/namespaces/remote-demo/routes/myremotedebug
+  uid: 4e5fb05b-c34e-11e9-ae3d-080027dffa93
 spec:
-  host: www.example.com
+  host: myremotedebug-remote-demo.192.168.99.102.nip.io
   port:
     targetPort: http
   to:
@@ -21,9 +22,9 @@ spec:
 status:
   ingress:
   - conditions:
-    - lastTransitionTime: 2019-08-16T22:03:07Z
+    - lastTransitionTime: 2019-08-20T13:27:50Z
       status: "True"
       type: Admitted
-    host: www.example.com
+    host: myremotedebug-remote-demo.192.168.99.102.nip.io
     routerName: router
     wildcardPolicy: None
